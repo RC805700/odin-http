@@ -3,22 +3,23 @@ package http
 import "core:bytes"
 import "core:container/queue"
 import "core:log"
-import "core:net"
 import "core:nbio"
+import "core:net"
 import "core:strings"
+
+
+// TODO: shutdown doesn't work.
 
 Sse :: struct {
 	user_data: rawptr,
 	on_err:    Maybe(Sse_On_Error),
+	r:         ^Response,
 
-	r: ^Response,
-
-	state: Sse_State,
-
-	_events: queue.Queue(Sse_Event),
-
-	_buf:  strings.Builder,
-	_sent: int,
+	// State should be considered read-only by users.
+	state:     Sse_State,
+	_events:   queue.Queue(Sse_Event),
+	_buf:      strings.Builder,
+	_sent:     int,
 }
 
 Sse_Event :: struct {
@@ -31,10 +32,23 @@ Sse_Event :: struct {
 
 Sse_State :: enum {
 	Pre_Start,
+
+	// The initial HTTP response is being sent over the connection (status code&headers) before
+	// we can start sending events.
 	Starting,
+
+	// No events are being sent over the connection but it is ready to.
 	Idle,
+
+	// An event is being sent over the connection.
 	Sending,
+
+	// Set to when sse_end is called when there are still events in the queue.
+	// The events in the queue will be processed and then closed.
 	Ending,
+
+	// Either done ending or forced ending.
+	// Every callback will return immediately, nothing else is processed.
 	Close,
 }
 
@@ -54,7 +68,7 @@ sse_init :: proc(
 	queue.init(&sse._events, allocator = allocator)
 	strings.builder_init(&sse._buf, allocator)
 
-	if r.status == .Not_Found { r.status = .OK }
+	if r.status == .Not_Found {r.status = .OK}
 	if !headers_has_unsafe(r.headers, "content-type") {
 		headers_set_unsafe(&r.headers, "content-type", "text/event-stream")
 	}
@@ -106,7 +120,7 @@ sse_end_force :: proc(sse: ^Sse) {
 }
 
 sse_end :: proc(sse: ^Sse) {
-	if sse.state >= .Ending { return }
+	if sse.state >= .Ending {return}
 
 	if sse.state == .Sending {
 		sse.state = .Ending
@@ -126,7 +140,7 @@ sse_destroy :: proc(sse: ^Sse) {
 }
 
 _sse_err :: proc(sse: ^Sse, err: nbio.Send_Error) {
-	if sse.state >= .Ending { return }
+	if sse.state >= .Ending {return}
 
 	sse.state = .Close
 
@@ -144,7 +158,7 @@ _sse_call_on_err :: proc(sse: ^Sse, err: nbio.Send_Error) {
 }
 
 _sse_process :: proc(sse: ^Sse) {
-	if sse.state == .Close { return }
+	if sse.state == .Close {return}
 
 	if queue.len(sse._events) == 0 {
 		#partial switch sse.state {
@@ -172,7 +186,7 @@ _sse_on_send :: proc(op: ^nbio.Operation, sse: ^Sse) {
 		return
 	}
 
-	if sse.state == .Close { return }
+	if sse.state == .Close {return}
 
 	queue.pop_front(&sse._events)
 	_sse_process(sse)

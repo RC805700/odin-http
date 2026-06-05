@@ -1,21 +1,48 @@
 #+private
 package http
 
-import "core:mem/virtual"
 import "base:intrinsics"
+import "core:mem/virtual"
 
 import "core:bufio"
 import "core:nbio"
 import "core:net"
 
 Scan_Callback :: #type proc(user_data: rawptr, token: string, err: bufio.Scanner_Error)
-Split_Proc    :: #type proc(split_data: rawptr, data: []byte, at_eof: bool) -> (advance: int, token: []byte, err: bufio.Scanner_Error, final_token: bool)
+Split_Proc :: #type proc(
+	split_data: rawptr,
+	data: []byte,
+	at_eof: bool,
+) -> (
+	advance: int,
+	token: []byte,
+	err: bufio.Scanner_Error,
+	final_token: bool,
+)
 
-scan_lines :: proc(split_data: rawptr, data: []byte, at_eof: bool) -> (advance: int, token: []byte, err: bufio.Scanner_Error, final_token: bool) {
+scan_lines :: proc(
+	split_data: rawptr,
+	data: []byte,
+	at_eof: bool,
+) -> (
+	advance: int,
+	token: []byte,
+	err: bufio.Scanner_Error,
+	final_token: bool,
+) {
 	return bufio.scan_lines(data, at_eof)
 }
 
-scan_num_bytes :: proc(split_data: rawptr, data: []byte, at_eof: bool) -> (advance: int, token: []byte, err: bufio.Scanner_Error, final_token: bool) {
+scan_num_bytes :: proc(
+	split_data: rawptr,
+	data: []byte,
+	at_eof: bool,
+) -> (
+	advance: int,
+	token: []byte,
+	err: bufio.Scanner_Error,
+	final_token: bool,
+) {
 	assert(split_data != nil)
 	n := int(uintptr(split_data))
 	assert(n >= 0)
@@ -32,7 +59,8 @@ scan_num_bytes :: proc(split_data: rawptr, data: []byte, at_eof: bool) -> (advan
 }
 
 // A callback based scanner over the connection based on nbio.
-Scanner :: struct /* #no_copy */ {
+Scanner :: struct {
+	/* #no_copy */
 	connection:                   ^Connection,
 	split:                        Split_Proc,
 	split_data:                   rawptr,
@@ -55,10 +83,10 @@ INIT_BUF_SIZE :: 1024
 DEFAULT_MAX_CONSECUTIVE_EMPTY_READS :: 128
 
 scanner_init :: proc(s: ^Scanner, c: ^Connection, buf_allocator := context.allocator) {
-	s.connection     = c
-	s.split          = scan_lines
+	s.connection = c
+	s.split = scan_lines
 	s.max_token_size = bufio.DEFAULT_MAX_SCAN_TOKEN_SIZE
-	s.buf.allocator  = buf_allocator
+	s.buf.allocator = buf_allocator
 }
 
 scanner_destroy :: proc(s: ^Scanner) {
@@ -67,21 +95,21 @@ scanner_destroy :: proc(s: ^Scanner) {
 
 scanner_reset :: proc(s: ^Scanner) {
 	remove_range(&s.buf, 0, s.start)
-	s.end   -= s.start
-	s.start  = 0
+	s.end -= s.start
+	s.start = 0
 
-	s.split                        = scan_lines
-	s.split_data                   = nil
-	s.max_token_size               = bufio.DEFAULT_MAX_SCAN_TOKEN_SIZE
-	s.token                        = nil
-	s._err                         = nil
-	s.consecutive_empty_reads      = 0
-	s.max_consecutive_empty_reads  = DEFAULT_MAX_CONSECUTIVE_EMPTY_READS
+	s.split = scan_lines
+	s.split_data = nil
+	s.max_token_size = bufio.DEFAULT_MAX_SCAN_TOKEN_SIZE
+	s.token = nil
+	s._err = nil
+	s.consecutive_empty_reads = 0
+	s.max_consecutive_empty_reads = DEFAULT_MAX_CONSECUTIVE_EMPTY_READS
 	s.successive_empty_token_count = 0
-	s.done                         = false
-	s.could_be_too_short           = false
-	s.user_data                    = nil
-	s.callback                     = nil
+	s.done = false
+	s.could_be_too_short = false
+	s.user_data = nil
+	s.callback = nil
 }
 
 scanner_scan :: proc(
