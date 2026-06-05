@@ -41,7 +41,7 @@ respond_file :: proc(r: ^Response, path: string, content_type: Maybe(Mime_Type) 
 	assert_has_td(loc)
 	assert(!r.sent, "response has already been sent", loc)
 
-	mime := mime_from_extension(path)
+	mime := content_type.? or_else mime_from_extension(path)
 	content_type := mime_to_content_type(mime)
 	headers_set_content_type(&r.headers, content_type)
 
@@ -74,7 +74,7 @@ respond_file :: proc(r: ^Response, path: string, content_type: Maybe(Mime_Type) 
 			bytes.buffer_grow(&r._buf, int(op.stat.size))
 			buf := _dynamic_unwritten(r._buf.buf)[:op.stat.size]
 
-			nbio.read_poly2(op.stat.handle, 0, buf, path, r, on_read, all=true)
+			nbio.read_poly2(op.stat.handle, 0, buf, path, r, on_read, all = true)
 		}
 	}
 
@@ -96,7 +96,13 @@ Responds with the given content, determining content type from the given path.
 
 This is very useful when you want to `#load(path)` at compile time and respond with that.
 */
-respond_file_content :: proc(r: ^Response, path: string, content: []byte, status: Status = .OK, loc := #caller_location) {
+respond_file_content :: proc(
+	r: ^Response,
+	path: string,
+	content: []byte,
+	status: Status = .OK,
+	loc := #caller_location,
+) {
 	mime := mime_from_extension(path)
 	content_type := mime_to_content_type(mime)
 
@@ -122,26 +128,37 @@ respond_dir :: proc(r: ^Response, base, target, request: string, loc := #caller_
 	}
 
 	// Detect path traversal attacks.
-	req_clean, err_req   := filepath.clean(request, context.temp_allocator)
+	req_clean, err_req := filepath.clean(request, context.temp_allocator)
 	base_clean, err_base := filepath.clean(base, context.temp_allocator)
 	if err_req != nil || err_base != nil || !strings.has_prefix(req_clean, base_clean) {
 		respond(r, Status.Not_Found)
 		return
 	}
 
-	file_path, _ := filepath.join([]string{"./", target, strings.trim_prefix(req_clean, base_clean)}, context.temp_allocator)
+	file_path, _ := filepath.join(
+		[]string{"./", target, strings.trim_prefix(req_clean, base_clean)},
+		context.temp_allocator,
+	)
 	respond_file(r, file_path, loc = loc)
 }
 
 // Sets the response to one that returns the JSON representation of the given value.
-respond_json :: proc(r: ^Response, v: any, status: Status = .OK, opt: json.Marshal_Options = {}, loc := #caller_location) -> (err: json.Marshal_Error) {
+respond_json :: proc(
+	r: ^Response,
+	v: any,
+	status: Status = .OK,
+	opt: json.Marshal_Options = {},
+	loc := #caller_location,
+) -> (
+	err: json.Marshal_Error,
+) {
 	opt := opt
 
 	r.status = status
 	headers_set_content_type(&r.headers, mime_to_content_type(Mime_Type.Json))
 
 	// Going to write a MINIMUM of 128 bytes at a time.
-	rw:  Response_Writer
+	rw: Response_Writer
 	buf: [128]byte
 	response_writer_init(&rw, r, buf[:])
 
@@ -163,7 +180,7 @@ respond_with_none :: proc(r: ^Response, loc := #caller_location) {
 	assert_has_td(loc)
 
 	conn := r._conn
-	req  := conn.loop.req
+	req := conn.loop.req
 
 	// Respond as head request if we set it to get.
 	if rline, ok := req.line.(Requestline); ok && req.is_head && conn.server.opts.redirect_head_to_get {

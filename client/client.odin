@@ -39,7 +39,7 @@ request_destroy :: proc(r: ^Request) {
 }
 
 with_json :: proc(r: ^Request, v: any, opt: json.Marshal_Options = {}) -> json.Marshal_Error {
-	if r.method == .Get { r.method = .Post }
+	if r.method == .Get {r.method = .Post}
 	http.headers_set_content_type(&r.headers, http.mime_to_content_type(.Json))
 
 	stream := bytes.buffer_to_stream(&r.body)
@@ -145,7 +145,12 @@ Response :: struct {
 
 // Frees the response, closes the connection.
 // Optionally pass the response_body returned 'body' and 'was_allocation' to destroy it too.
-response_destroy :: proc(res: ^Response, body: Maybe(Body_Type) = nil, was_allocation := false, body_allocator := context.allocator) {
+response_destroy :: proc(
+	res: ^Response,
+	body: Maybe(Body_Type) = nil,
+	was_allocation := false,
+	body_allocator := context.allocator,
+) {
 	// Header keys are allocated, values are slices into the body.
 	// NOTE: this is fine because we don't add any headers with `headers_set_unsafe()`.
 	// If we did, we wouldn't know if the key was allocated or a literal.
@@ -160,7 +165,7 @@ response_destroy :: proc(res: ^Response, body: Maybe(Body_Type) = nil, was_alloc
 	bufio.scanner_destroy(&res._body)
 
 	for cookie in res.cookies {
-		delete(cookie._raw)
+		delete(cookie._raw, res.cookies.allocator)
 	}
 	delete(res.cookies)
 
@@ -210,7 +215,7 @@ Body_Type :: union #no_nil {
 body_destroy :: proc(body: Body_Type, was_allocation: bool, allocator := context.allocator) {
 	switch b in body {
 	case Body_Plain:
-		if was_allocation { delete(b, allocator) }
+		if was_allocation {delete(b, allocator)}
 	case Body_Url_Encoded:
 		for k, v in b {
 			delete(k, b.allocator)
@@ -251,7 +256,7 @@ _parse_body :: proc(
 	// See [RFC 7230 3.3.3](https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3) for the rules.
 	// Point 3 paragraph 3 and point 4 are handled before we get here.
 
-	enc, has_enc       := http.headers_get_unsafe(headers^, "transfer-encoding")
+	enc, has_enc := http.headers_get_unsafe(headers^, "transfer-encoding")
 	length, has_length := http.headers_get_unsafe(headers^, "content-length")
 	switch {
 	case has_enc && strings.has_suffix(enc, "chunked"):
@@ -268,7 +273,7 @@ _parse_body :: proc(
 	// Automatically decode url encoded bodies.
 	if typ, ok := http.headers_get_unsafe(headers^, "content-type"); ok && typ == "application/x-www-form-urlencoded" {
 		plain := body.(Body_Plain)
-		defer if was_allocation { delete(plain, allocator) }
+		defer if was_allocation {delete(plain, allocator)}
 
 		keyvalues := strings.split(plain, "&", allocator)
 		defer delete(keyvalues, allocator)
@@ -306,7 +311,15 @@ _response_till_close :: proc(_body: ^bufio.Scanner, max_length: int) -> (string,
 	_body.max_token_size = max_length
 	defer _body.max_token_size = bufio.DEFAULT_MAX_SCAN_TOKEN_SIZE
 
-	_body.split = proc(data: []byte, at_eof: bool) -> (advance: int, token: []byte, err: bufio.Scanner_Error, final_token: bool) {
+	_body.split = proc(
+		data: []byte,
+		at_eof: bool,
+	) -> (
+		advance: int,
+		token: []byte,
+		err: bufio.Scanner_Error,
+		final_token: bool,
+	) {
 		if at_eof {
 			return len(data), data, nil, true
 		}
@@ -395,7 +408,7 @@ _response_body_chunked :: proc(
 	body_buff: bytes.Buffer
 
 	bytes.buffer_init_allocator(&body_buff, 0, 0, allocator)
-	defer if err != nil { bytes.buffer_destroy(&body_buff) }
+	defer if err != nil {bytes.buffer_destroy(&body_buff)}
 
 	for {
 		if !bufio.scanner_scan(_body) {
@@ -415,7 +428,7 @@ _response_body_chunked :: proc(
 			err = .Invalid_Chunk_Size
 			return
 		}
-		if size == 0 { break }
+		if size == 0 {break}
 
 		if max_length > -1 && bytes.buffer_length(&body_buff) + size > max_length {
 			return "", .Too_Long

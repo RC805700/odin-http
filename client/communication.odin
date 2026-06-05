@@ -85,7 +85,7 @@ format_request :: proc(target: http.URL, request: ^Request, allocator := context
 		// Escape newlines in headers, if we don't, an attacker can find an endpoint
 		// that returns a header with user input, and inject headers into the response.
 		esc_value, was_allocation := strings.replace_all(value, "\n", "\\n", allocator)
-		defer if was_allocation { delete(esc_value) }
+		defer if was_allocation {delete(esc_value)}
 
 		bytes.buffer_write_string(&buf, esc_value)
 		bytes.buffer_write_string(&buf, "\r\n")
@@ -178,7 +178,7 @@ parse_response :: proc(socket: Communication, allocator := context.allocator) ->
 
 		line := bufio.scanner_text(&scanner)
 		// Empty line means end of headers.
-		if line == "" { break }
+		if line == "" {break}
 
 		key, hok := http.header_parse(&res.headers, line, allocator)
 		if !hok {
@@ -276,17 +276,24 @@ _socket_stream_proc :: proc(
 		#partial switch recv_err {
 		case .None:
 			err = .None
-		case .Network_Unreachable, .Insufficient_Resources, .Invalid_Argument, .Not_Connected, .Connection_Closed, .Timeout, .Would_Block, .Interrupted:
+		case .Network_Unreachable,
+		     .Insufficient_Resources,
+		     .Invalid_Argument,
+		     .Not_Connected,
+		     .Connection_Closed,
+		     .Timeout,
+		     .Would_Block,
+		     .Interrupted:
 			log.errorf("unexpected error reading tcp: %s", recv_err)
 			err = .Unexpected_EOF
 		case:
 			log.errorf("unexpected error reading tcp: %s", recv_err)
 			err = .Unknown
 		}
-		case nil:
-			err = .None
-		case:
-			assert(false, "recv_tcp only returns TCP_Recv_Error or nil")
-		}
+	case nil:
+		err = .None
+	case:
+		assert(false, "recv_tcp only returns TCP_Recv_Error or nil")
+	}
 	return
 }
