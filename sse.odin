@@ -20,6 +20,9 @@ Sse :: struct {
 	_events:   queue.Queue(Sse_Event),
 	_buf:      strings.Builder,
 	_sent:     int,
+	
+	// Pointer to the owning thread's connection map (for shutdown filtering)
+	owner_conns: ^map[net.TCP_Socket]^Connection,
 }
 
 Sse_Event :: struct {
@@ -64,6 +67,7 @@ sse_init :: proc(
 	sse.r = r
 	sse.user_data = user_data
 	sse.on_err = on_error
+	sse.owner_conns = &td.conns
 
 	queue.init(&sse._events, allocator = allocator)
 	strings.builder_init(&sse._buf, allocator)

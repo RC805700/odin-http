@@ -90,10 +90,10 @@ Server :: struct {
 	// because it would otherwise need to call time.now() and format the date on each response.
 	date:                 Server_Date,
 
-	// Optional callback invoked once per thread during shutdown.
+	// Optional callback invoked from each thread during shutdown.
 	// Use this to close long-lived connections (e.g., SSE) before the shutdown loop waits.
-	shutdown_hook:        proc(s: ^Server),
-	shutdown_hook_called: Atomic(bool),
+	// The conns parameter points to the current thread's connection map.
+	shutdown_hook:        proc(s: ^Server, conns: ^map[net.TCP_Socket]^Connection),
 }
 
 Server_Thread :: struct {
@@ -265,9 +265,7 @@ _server_thread_shutdown :: proc(s: ^Server, loc := #caller_location) {
 	defer delete(td.conns)
 
 	if s.shutdown_hook != nil {
-		if !atomic_load(&s.shutdown_hook_called) {
-			s.shutdown_hook(s)
-		}
+		s.shutdown_hook(s, &td.conns)
 	}
 
 	for {
